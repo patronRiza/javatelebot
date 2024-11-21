@@ -1,61 +1,43 @@
 package ru.jrp.javarush_telegrambot.bot;
 
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
-import org.telegram.telegrambots.client.okhttp.OkHttpTelegramClient;
-import org.telegram.telegrambots.longpolling.BotSession;
-import org.telegram.telegrambots.longpolling.interfaces.LongPollingUpdateConsumer;
-import org.telegram.telegrambots.longpolling.starter.AfterBotRegistration;
-import org.telegram.telegrambots.longpolling.starter.SpringLongPollingBot;
-import org.telegram.telegrambots.longpolling.util.LongPollingSingleThreadUpdateConsumer;
-import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
+import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.objects.Update;
-import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
-import org.telegram.telegrambots.meta.generics.TelegramClient;
+import ru.jrp.javarush_telegrambot.commands.CommandContainer;
+import ru.jrp.javarush_telegrambot.commands.CommandName;
+import ru.jrp.javarush_telegrambot.services.SendBotMessageServiceImpl;
 
 @Component
-public class JavaTeleBot implements SpringLongPollingBot, LongPollingSingleThreadUpdateConsumer {
+@Slf4j
+public class JavaTeleBot extends TelegramLongPollingBot {
 
-    /*@Value("${bot.token}")
-    private String token;*/
+    public static String COMMAND_PREFIX = "/";
 
-    private final TelegramClient telegramClient;
+    private final CommandContainer commandContainer;
 
-    public JavaTeleBot() {
-        telegramClient = new OkHttpTelegramClient(getBotToken());
+    public JavaTeleBot(@Value("${bot.token}") String token) {
+        super(token);
+        commandContainer =
+                new CommandContainer(new SendBotMessageServiceImpl(this));
     }
 
     @Override
-    public String getBotToken() {
-        return "8132631337:AAGXaY_rsRSQbfR05tDwVV3e8kZMLZ6ol0g";
-    }
-
-    @Override
-    public LongPollingUpdateConsumer getUpdatesConsumer() {
-        return this;
-    }
-
-    @Override
-    public void consume(Update update) {
+    public void onUpdateReceived(Update update) {
         if (update.hasMessage() && update.getMessage().hasText()) {
-            String message = update.getMessage().getText();
-            Long chatId = update.getMessage().getChatId();
+            String message = update.getMessage().getText().trim();
+            if (message.startsWith(COMMAND_PREFIX)) {
+                String command = message.split(" ")[0].toLowerCase();
 
-            SendMessage sendMessage = SendMessage
-                    .builder()
-                    .chatId(chatId)
-                    .text(message)
-                    .build();
-
-            try {
-                telegramClient.execute(sendMessage); // Sending our message object to user
-            } catch (TelegramApiException e) {
-                e.printStackTrace();
-            }
+                commandContainer.retriveCommand(command).execute(update);
+            } else
+                commandContainer.retriveCommand(CommandName.NO.getCommandName()).execute(update);
         }
     }
 
-    @AfterBotRegistration
-    public void afterRegistration(BotSession botSession) {
-        System.out.println("Registered bot running state is: " + botSession.isRunning());
+    @Override
+    public String getBotUsername() {
+        return "test_javatele_bot";
     }
 }
